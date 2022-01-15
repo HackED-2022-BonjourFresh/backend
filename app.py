@@ -44,7 +44,7 @@ def hello():
 def sign_up():
     if request.method == "POST":
         try:
-            username = request.get_json()["username"]
+            username = request.get_json(force=True)["username"]
             user = User(username=username)
             session["username"] = username
             db.session.add(user)
@@ -57,7 +57,7 @@ def sign_up():
 @app.route("/login", methods=["POST"])
 def login():
     if request.method == "POST":
-        username = request.get_json()["username"]
+        username = request.get_json(force=True)["username"]
         user = User.query.get(username)
         if not user:
             resp = make_response("Error: User not signed up", 400)
@@ -75,8 +75,8 @@ def register_recipe():
     recipe_name = json["recipe_name"]
     ingredients = json["ingredients"]
 
-
-    if session.query(Recipe).filter(Recipe.name == recipe_name and Recipe.users_recipe == username).exists():
+    q = db.session.query(Recipe).filter(Recipe.name == recipe_name and Recipe.users_recipe == username)
+    if db.session.query(q.exists()).scalar():
         return "Recipe {} already exists for user {}!".format(recipe_name, username)
 
     for ingred in ingredients:
