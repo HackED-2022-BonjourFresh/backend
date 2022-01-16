@@ -2,6 +2,7 @@ from curses.ascii import US
 from dis import Instruction
 from enum import unique
 from functools import wraps
+import json
 from sqlite3 import IntegrityError
 from flask import Flask, jsonify, make_response, request, session, flash
 from flask_sqlalchemy import SQLAlchemy
@@ -9,7 +10,7 @@ from markupsafe import re
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import ForeignKey, select, exists
 
-from helpers import get_req_arg, login_required, merge_ingreds, ingred_unit_is_known, attempt_to_conv_type_to_known_type
+from helpers import get_req_arg, login_required, merge_ingreds, ingred_unit_is_known, attempt_to_conv_type_to_known_type, get_amount
 
 db_name = "test.db"
 
@@ -114,7 +115,6 @@ def recipe_for_user():
     if request.method == "POST":
         json = request.get_json(force=True)
         username = session["username"]
-        #username = json["username"]
         recipe_name = json["recipe_name"]
         date = json["date"]
         q = UsersRecipe.query.filter_by(username=username, recipe_name=recipe_name).first()
@@ -126,7 +126,7 @@ def recipe_for_user():
             return make_response("Entered recipe for user", 200)
     
     if request.method == "GET":
-        username = "loren" #session["username"]
+        username = session["username"]
         query = UsersRecipe.query.filter_by(username=username).all()
         user_recipes=[]
         for q in query:
@@ -157,31 +157,24 @@ def gen_grocery_list():
         for ingred in ingred_list:
             ingred_name = ingred["name"]
 
-            if ingred_name == "butter":
-                print(ingred)
-
             if ingred_name not in agg_ingreds:
-                if ingred_name == "butter":
-                    print("BUTTER IS FIRST INSERTED")
-
-
                 agg_ingreds[ingred_name] = {}
                 agg_ingreds[ingred_name]["known"] = None
                 agg_ingreds[ingred_name]["unknown"] = []
                 add_agg_ingred_to_dict(agg_ingreds, ingred)
             elif agg_ingreds[ingred_name]["known"] is not None and ingred_unit_is_known(ingred):
-                print("BUTTER IN SECOND CONDITIONAL")
                 try:
                     existing_ingred_quantity = agg_ingreds[ingred_name]["known"]
-                    agg_ingreds[ingred_name]["known"] = merge_ingreds(ingred, existing_ingred_quantity)
+                    amt, units = merge_ingreds(ingred, existing_ingred_quantity)
+                    agg_ingreds[ingred_name]["known"]["amount"] = amt
+                    agg_ingreds[ingred_name]["known"]["unit"] = units
                 except:
                     add_ingred_to_unknown(agg_ingreds, ingred)
             else:
-                # 
                 add_ingred_to_unknown(agg_ingreds, ingred) 
-                print("{} here".format(ingred_name))
 
-    return jsonify(agg_ingreds)
+
+    return jsonify(compact_grocery_list(agg_ingreds))
 
 def remove_name(ingredient):
     new_ingredient = {}
@@ -200,6 +193,23 @@ def add_agg_ingred_to_dict(agg_ingreds, ingred):
 def add_ingred_to_unknown(agg_ingreds, ingred):
     agg_ingreds[ingred["name"]]["unknown"].append(str(ingred["amount"]) +" "+ str(ingred["unit"]))
 
+@app.route("/grocery_list_for_user/random", methods=["GET"])
+@login_required
+def get_grocery_list():
+    recipes = recipe_for_user().get_json(force=True)
+    grocery_list = []
+    ingredients = []
+    for i in recipes:
+        for j in i["ingredients"]:
+            if j["name"] not in ingredients:
+                ingredients.append(j["name"])
+                amount, unit = get_amount()
+                grocery_list.append({"name": j["name"],
+                                     "amount": amount,
+                                     "unit": unit})
+
+    return jsonify(grocery_list)
+
 @app.route("/logout")
 @login_required
 def logout():
@@ -214,3 +224,31 @@ def get_instructions(json):
         line = f'{inst["number"]}. {inst["step"]}'
         instructions.append(line)
     return "\n".join(instructions)
+
+
+def compact_grocery_list(agg_ingredients):
+    grocery_list = []
+    for name in agg_ingredients:
+        if agg_ingredients[name]["known"] is not None and not agg_ingredients[name]["unknown"]:
+            grocery_list.append({
+                "name": name,
+                "amount": agg_ingredients[name]["known"]["amount"],
+                "unit": agg_ingredients[name]["known"]["unit"]
+            })
+        elif agg_ingredients[name]["known"] is None and agg_ingredients[name]["unknown"]:
+            unknown = agg_ingredients[name]["unknown"]
+            amount, unit = list(unknown[0].split(" ")) if len(unknown) == 1 else (unknown, "")
+            grocery_list.append({
+                "name": name,
+                "amount": amount,
+                "unit": unit
+            })
+        else:
+           grocery_list.append({
+                "name": name,
+                "amount": agg_ingredients[name]["known"]["amount"],
+                "unit": agg_ingredients[name]["known"]["unit"],
+                "extra": agg_ingredients[name]["unknown"]
+            }) 
+
+    return grocery_list
