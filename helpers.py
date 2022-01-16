@@ -7,7 +7,7 @@ VOL_TYPE = 1
 UNKNOWN_TYPE = 2
 
 # For reference
-UNITS = ['oz', 'cup', 'large', 'cups', 'tablespoon', 'servings', 'ounces', '', 
+UNITS = ['oz', 'cup', 'large', 'cups', 'tablespoon', 'servings', 'ounces',  
 'teaspoon', 'tablespoons', 'c', 'pound', 'null', 'fillet', 'serving', 'bunch', 
 'loaf', 'grams', 'package', 'tsp', 'pounds', 'g', 'teaspoons', 'pinch', 'slices']
 
@@ -19,7 +19,9 @@ VOL_UNITS = {
     "cup": 250.0,
     "litre": 1000.0,
 }
+SORTED_VOL_UNITS = sorted(list(VOL_UNITS.items()))
 
+# Atomic units are mg
 MASS_UNITS = {
     "mg": 1.0,
     "g": 1000.0,
@@ -27,6 +29,7 @@ MASS_UNITS = {
     "kg": 1000000.0,
     "lb": 453592.0,
 }
+SORTED_MASS_UNITS = sorted(list(MASS_UNITS.items()))
 
 UNITS_CONV = {
     "milliliter": "ml",
@@ -40,6 +43,7 @@ UNITS_CONV = {
     "gram": "g",
     "grams": "g",
     "ounce": "oz",
+    "ounces": "oz",
     "killigram": "kg",
     "pound": "lb"
 }
@@ -63,25 +67,10 @@ def ingred_unit_is_known(ingred):
 def merge_ingreds(q1, q2):
     u1, q1 = unit_and_amt(q1)
     u2, q2 = unit_and_amt(q2)
-    
+
     return add_quantities(q1, u1, q2, u2)
 
 def unit_and_amt(q):
-    # if type(q) == str:
-    #     split = q.split(" ")
-    #     if len(split) == 2:
-    #         amt, unit = float(split[0]), split[1]
-    #     elif len(split) == 1:
-    #         amt, unit = float(0), None
-    #     else:
-    #         raise TypeError("Don't know how to split up amt and unit")
-
-    # elif type(q) == float:
-    #     amt, unit = q, None 
-
-    # else:
-    #     raise TypeError("Don't know how to split up amt and unit")
-
     return (q["unit"], q["amount"])
 
 def unit_understandable(unit):
@@ -102,42 +91,58 @@ def get_unit_type(unit):
         return UNKNOWN_TYPE
 
 def add_quantities(q1, u1, q2, u2):
-    print(u2)
     if get_unit_type(u1) == MASS_TYPE:
-        return conv_mass_unit_to_mg(q1, u1, q2, u2)
+        res = add_quantities_mass(q1, u1, q2, u2)
+        smallest_unit = pick_smallest_unit_for_mass(res)
+        return (res / MASS_UNITS[smallest_unit]), smallest_unit
+
     elif get_unit_type(u2) == VOL_TYPE:
-        return conv_mass_unit_to_mg(q1, u1, q2, u2)
+        res = add_quantities_vol(q1, u1, q2, u2)
+        smallest_unit = pick_smallest_unit_for_volume(res)
+        return (res / VOL_UNITS[smallest_unit]), smallest_unit
     else:
-        print("error")
+        raise Exception("Quantity unit made it into add that is not recognized! ({})".format())
 
 def add_quantities_vol(q1, u1, q2, u2):
     return conv_vol_unit_to_ml(q1, u1) + conv_vol_unit_to_ml(q2, u2)
 
-def add_quantities_mass(q1, q2):
-    return conv_mass_unit_to_mg(q1) + conv_mass_unit_to_mg(q2)
+def add_quantities_mass(q1, u1, q2, u2):
+    return conv_mass_unit_to_mg(q1, u1) + conv_mass_unit_to_mg(q2, u2)
 
 def conv_vol_unit_to_ml(vol, unit):
-    return VOL_UNITS[unit]
+    return VOL_UNITS[unit] * vol
 
-def conv_mass_unit_to_mg(vol, unit):
-    return MASS_UNITS[unit]
+def conv_mass_unit_to_mg(mass, unit):
+    return MASS_UNITS[unit] * mass
 
 def pick_smallest_unit_for_volume(vol):
-    return pick_smallest_unit(vol, VOL_UNITS)
+    return pick_smallest_unit(vol, SORTED_VOL_UNITS)
 
-def pick_smallest_unit_for_mas(mass, unit):
-    return pick_smallest_unit(mass, MASS_UNITS)
+def pick_smallest_unit_for_mass(mass, unit):
+    return pick_smallest_unit(mass, SORTED_MASS_UNITS)
 
 def pick_smallest_unit(amt, l_table):
-    for (unit, min_amt) in l_table.items():
-        if min_amt > amt:
-            continue
+    prev_unit = l_table[0] # Gross...
+    for (unit, unit_amt) in l_table:
+        if unit_amt >= amt:
+            return prev_unit
 
-        return unit
+        prev_unit = unit
 
     # Gross... Get the largest unit if it's too big.
-    (_, unit) = VOL_UNITS[-1]
+    (unit, _) = VOL_UNITS[-1]
     return unit
 
+import random
+def get_amount():
+    idx = random.randint(0,len(UNITS)-1)
+    if random.randint(1,100) > 80:
+        half= ".5"
+    else:
+        half=""
 
-
+    if random.randint(0,10) > 3:
+        number= random.randint(1,10)
+    else:
+        number = random.randint(1, 100)
+    return f"{str(number)}{half}",  UNITS[idx]
