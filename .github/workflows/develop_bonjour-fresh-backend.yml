@@ -61,3 +61,6 @@ jobs:
           app-name: 'bonjour-fresh-backend'
           slot-name: 'Production'
           publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_62F34F3D6B0A4A2DBC77DF7AD6814F08 }}
+      
+      - name: Run Flask
+        run: flask run
