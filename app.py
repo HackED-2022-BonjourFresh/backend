@@ -82,7 +82,7 @@ def login():
         return resp
 
 @app.route("/register_recipe", methods=["POST"])
-# @login_required
+@login_required
 def register_recipe():
     if request.method == "POST":
         json = request.get_json(force=True)
@@ -113,12 +113,12 @@ def register_recipe():
 
 
 @app.route("/recipes_for_user", methods=["GET", "POST"])
-# @login_required
+@login_required
 def recipe_for_user():
     if request.method == "POST":
         json = request.get_json(force=True)
-        #username = session["username"]
-        username = json["username"]
+        username = session["username"]
+        #username = json["username"]
         recipe_name = json["recipe_name"]
         date = json["date"]
         q = UsersRecipe.query.filter_by(username=username, recipe_name=recipe_name).first()
@@ -130,7 +130,7 @@ def recipe_for_user():
             return make_response("Entered recipe for user", 200)
     
     if request.method == "GET":
-        username = "mitch" # Change to session["username"]
+        username  = session["username"]
         query = UsersRecipe.query.filter_by(username=username).all()
         user_recipes={}
         for q in query:
