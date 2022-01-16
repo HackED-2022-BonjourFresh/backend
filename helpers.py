@@ -15,8 +15,7 @@ MASS_UNITS = {
     "mg": 1.0,
     "g": 1000.0,
     "oz": 28000.34952,
-    "Kg": 1,
-
+    "Kg": 1000000,
 }
 
 def get_req_arg(key):
@@ -33,19 +32,39 @@ def login_required(func):
 
 # Always favour largest unit
 def merge_ingreds(q1, q2):
+    unit_and_amt(q1)
+
     if type(q1) == str:
         amt, unit = q1.split(" ")
+        amt = float(amt)
     pass
 
+def unit_and_amt(q):
+    amt, unit = q1.split(" ")
+    return (amt, unit)
 
-def convert_vol_unit_to_ml(vol, unit):
-    VOL_UNITS[unit]
+def add_quantities_vol(q1, u1, q2, u2):
+    return conv_vol_unit_to_ml(q1, u1) + conv_vol_unit_to_ml(q2, u2)
 
+def add_quantities_mass(q1, q2):
+    return conv_mass_unit_to_mg(q1) + conv_mass_unit_to_mg(q2)
+
+def conv_vol_unit_to_ml(vol, unit):
+    return VOL_UNITS[unit]
+
+def conv_mass_unit_to_mg(vol, unit):
+    return MASS_UNITS[unit]
 
 def pick_smallest_unit_for_volume(vol):
-    for (unit, min_vol) in VOL_UNITS.items():
-        if min_vol > vol:
-            continue;
+    return pick_smallest_unit(vol, VOL_UNITS)
+
+def pick_smallest_unit_for_mas(mass, unit):
+    return pick_smallest_unit(mass, MASS_UNITS)
+
+def pick_smallest_unit(amt, l_table):
+    for (unit, min_amt) in l_table.items():
+        if min_amt > amt:
+            continue
 
         return unit
 
