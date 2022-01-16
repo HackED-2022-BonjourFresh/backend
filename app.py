@@ -9,7 +9,7 @@ from markupsafe import re
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import ForeignKey, select, exists
 
-from helpers import get_req_arg, login_required, merge_ingreds
+from helpers import get_req_arg, login_required, merge_ingreds, ingred_unit_is_known, attempt_to_conv_type_to_known_type
 
 db_name = "test.db"
 
@@ -42,7 +42,8 @@ class RecipeIngredient(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     recipe_name = db.Column(db.String(100), db.ForeignKey("recipe.name"))
     ingredient_name = db.Column(db.String(100))
-    quantity = db.Column(db.Integer)
+    amount = db.Column(db.Float)
+    unit = db.Column(db.String(50))
 
 db.create_all()
 
@@ -95,13 +96,12 @@ def register_recipe():
 
         db.session.add(Recipe(name=recipe_name, instructions=instructions, url_image=url_image))
 
-        for ingred in ingredients:
-
-            amount, unit = ingred["amount"], ingred["unit"]
-            quantity = f"{amount} {unit}"
+        for ingred in ingredients:            
             name = ingred["name"]
+            amount = ingred["amount"]
+            unit = attempt_to_conv_type_to_known_type(ingred["unit"].lower())
 
-            db.session.add(RecipeIngredient(recipe_name=recipe_name, ingredient_name=name, quantity=quantity))
+            db.session.add(RecipeIngredient(recipe_name=recipe_name, ingredient_name=name, amount=amount, unit=unit))
 
         db.session.commit()
 
@@ -126,10 +126,12 @@ def recipe_for_user():
             return make_response("Entered recipe for user", 200)
     
     if request.method == "GET":
-        username  = session["username"]
+        username = "loren" #session["username"]
         query = UsersRecipe.query.filter_by(username=username).all()
         user_recipes=[]
         for q in query:
+            if Recipe.query.filter_by(name=q.recipe_name).first() is None:
+                continue
             recipe = {"recipe_name": q.recipe_name,
                      "date": q.date, 
                      "instruction": Recipe.query.filter_by(name=q.recipe_name).first().instructions,
@@ -138,7 +140,7 @@ def recipe_for_user():
             ingredients = RecipeIngredient.query.filter_by(recipe_name=q.recipe_name).all()
             ingredients_list = []
             for i in ingredients:
-                ingredients_list.append({"name":i.ingredient_name, "quantity": i.quantity})
+                ingredients_list.append({"name":i.ingredient_name, "amount": "{:2}".format(i.amount), "unit": i.unit})
             recipe["ingredients"] = ingredients_list
 
             user_recipes.append(recipe)
@@ -146,19 +148,57 @@ def recipe_for_user():
         return jsonify(user_recipes)
 
 @app.route("/grocery_list_for_user", methods=["GET"])
-#@login_required
+@login_required
 def gen_grocery_list():
-    recipes = recipe_for_user()
+    recipes = recipe_for_user().get_json(force=True)
 
     agg_ingreds = {}
-    for ingred in map(lambda r: r.ingredients, recipes):
-        if ingred["name"] not in agg_ingreds:
-            agg_ingreds["name"] = ingred["quantity"]
-        else:
-            existing_ingred_quantity = ingred["name"]
-            agg_ingreds["name"] = merge_ingreds(ingred, existing_ingred_quantity)
+    for ingred_list in map(lambda r: r["ingredients"], recipes):
+        for ingred in ingred_list:
+            ingred_name = ingred["name"]
+
+            if ingred_name == "butter":
+                print(ingred)
+
+            if ingred_name not in agg_ingreds:
+                if ingred_name == "butter":
+                    print("BUTTER IS FIRST INSERTED")
+
+
+                agg_ingreds[ingred_name] = {}
+                agg_ingreds[ingred_name]["known"] = None
+                agg_ingreds[ingred_name]["unknown"] = []
+                add_agg_ingred_to_dict(agg_ingreds, ingred)
+            elif agg_ingreds[ingred_name]["known"] is not None and ingred_unit_is_known(ingred):
+                print("BUTTER IN SECOND CONDITIONAL")
+                try:
+                    existing_ingred_quantity = agg_ingreds[ingred_name]["known"]
+                    agg_ingreds[ingred_name]["known"] = merge_ingreds(ingred, existing_ingred_quantity)
+                except:
+                    add_ingred_to_unknown(agg_ingreds, ingred)
+            else:
+                # 
+                add_ingred_to_unknown(agg_ingreds, ingred) 
+                print("{} here".format(ingred_name))
 
     return jsonify(agg_ingreds)
+
+def remove_name(ingredient):
+    new_ingredient = {}
+    for i in ingredient:
+        if i != "name":
+            new_ingredient[i] = ingredient[i]
+    return new_ingredient
+
+def add_agg_ingred_to_dict(agg_ingreds, ingred):
+    if ingred_unit_is_known(ingred):
+        agg_ingreds[ingred["name"]]["known"] = remove_name(ingred)
+    else:
+        add_ingred_to_unknown(agg_ingreds, ingred)
+        # agg_ingreds[ingred["name"]]["unknown"].append(remove_name(ingred))
+
+def add_ingred_to_unknown(agg_ingreds, ingred):
+    agg_ingreds[ingred["name"]]["unknown"].append(str(ingred["amount"]) +" "+ str(ingred["unit"]))
 
 @app.route("/logout")
 @login_required
@@ -174,4 +214,3 @@ def get_instructions(json):
         line = f'{inst["number"]}. {inst["step"]}'
         instructions.append(line)
     return "\n".join(instructions)
-
