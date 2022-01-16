@@ -1,9 +1,13 @@
+from curses.ascii import US
+from dis import Instruction
+from enum import unique
 from functools import wraps
 from sqlite3 import IntegrityError
-from flask import Flask, make_response, request, session, flash
+from flask import Flask, jsonify, make_response, request, session, flash
 from flask_sqlalchemy import SQLAlchemy
+from markupsafe import re
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import select, exists
+from sqlalchemy import ForeignKey, select, exists
 
 from helpers import get_req_arg, login_required
 
@@ -18,24 +22,35 @@ app.config.from_mapping(
 
 db = SQLAlchemy(app)
 
+
+# ------------- DB Definitions -----------------------
 class User(db.Model):
     username = db.Column(db.String(80), primary_key=True)
 
+class UsersRecipe(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.Integer, db.ForeignKey("user.username"))
+    recipe_name = db.Column(db.String(50), db.ForeignKey("recipe.name"))
+    date = db.Column(db.String(50))
+
 class Recipe(db.Model):
     name = db.Column(db.String(50), primary_key=True)
-    users_recipe = db.Column(db.String(80))
+    instructions = db.Column(db.Text)
 
 class Ingredient(db.Model):
     name = db.Column(db.String(50), primary_key = True)
-    recipe_name = db.Column(db.String(50))
+    description = db.Column(db.String(50))
 
 class RecipeIngredient(db.Model):
-    recipe_name = db.Column(db.String(50), primary_key=True)
-    ingredient_name = db.Column(db.String(50), primary_key=True)
+    id = db.Column(db.Integer, primary_key=True)
+    recipe_name = db.Column(db.String(50), db.ForeignKey("recipe.name"))
+    ingredient_name = db.Column(db.String(50))
     quantity = db.Column(db.Integer)
 
 db.create_all()
 
+
+# ------------- Endpoints --------------------
 @app.route("/")
 def hello():
     return "hello world"
@@ -58,7 +73,7 @@ def sign_up():
 def login():
     if request.method == "POST":
         username = request.get_json(force=True)["username"]
-        user = User.query.get(username)
+        user = User.query.filter_by(username=username).first()
         if not user:
             resp = make_response("Error: User not signed up", 400)
             return resp
@@ -69,35 +84,67 @@ def login():
 @app.route("/register_recipe", methods=["POST"])
 # @login_required
 def register_recipe():
-    json = request.get_json()
+    if request.method == "POST":
+        json = request.get_json(force=True)
 
-    username = json["username"]
-    recipe_name = json["recipe_name"]
-    ingredients = json["ingredients"]
+        recipe_name = json["title"]
+        ingredients = json["extendedIngredients"]
+        instructions = get_instructions(json)
 
-    q = db.session.query(Recipe).filter(Recipe.name == recipe_name and Recipe.users_recipe == username)
-    if db.session.query(q.exists()).scalar():
-        return "Recipe {} already exists for user {}!".format(recipe_name, username)
+        q = db.session.query(Recipe).filter(Recipe.name == recipe_name)
+        if db.session.query(q.exists()).scalar():
+            return "Recipe {} already exists!".format(recipe_name)
 
-    for ingred in ingredients:
-        db.session.add(RecipeIngredient(recipe_name=recipe_name, ingredient_name=ingred["name"], quantity=ingred["quantity"]))
+        db.session.add(Recipe(name=recipe_name, instructions=instructions))
 
-    db.session.commit()
+        for ingred in ingredients:
+            # q = db.session.query(Ingredient).filter(Ingredient.name == ingred["name"])
+            # # if db.session.query(q.exists()).scalar() is None:
+            # #     db.session.add(Ingredient(name=ingred["name"])) 
+            amount, unit = ingred["amount"], ingred["unit"]
+            quantity = f"{amount} {unit}"
+            name = ingred["name"]
 
-    return "OK"
+            db.session.add(RecipeIngredient(recipe_name=recipe_name, ingredient_name=name, quantity=quantity))
 
-    # query = select(RecipeIngredient).where(RecipeIngredient.recipe_name == recipe_name)
-    # ingreds = db.session.execute(query)
+        db.session.commit()
+
+        return make_response("Entered recipe", 200)
 
 
-    # for ingred in ingredients:
-    #     print(ingred)
+@app.route("/recipes_for_user", methods=["GET", "POST"])
+# @login_required
+def recipe_for_user():
+    if request.method == "POST":
+        json = request.get_json(force=True)
+        #username = session["username"]
+        username = json["username"]
+        recipe_name = json["recipe_name"]
+        date = json["date"]
+        q = UsersRecipe.query.filter_by(username=username, recipe_name=recipe_name).first()
+        if q is not None:
+            return make_response("Recipe already registered for user", 400)
+        else:
+            db.session.add(UsersRecipe(username=username, recipe_name=recipe_name, date=date))
+            db.session.commit()
+            return make_response("Entered recipe for user", 200)
+    
+    if request.method == "GET":
+        username = "mitch" # Change to session["username"]
+        query = UsersRecipe.query.filter_by(username=username).all()
+        user_recipes={}
+        for q in query:
+            recipe = {"date": q.date, "instruction": Recipe.query.filter_by(name=q.recipe_name).first().instructions}
+            ingredients = RecipeIngredient.query.filter_by(recipe_name=q.recipe_name).all()
+            ingredients_list = []
+            for i in ingredients:
+                ingredients_list.append({i.ingredient_name: i.quantity})
+            recipe["ingredients"] = ingredients_list
 
-    # db.sesson.add()
+            user_recipes[q.recipe_name] = recipe
 
-@app.route("/register_recipe_for_user", methods=["GET", "POST"])
-def recipes():
-    pass
+        return jsonify(user_recipes)
+
 
 @app.route("/logout")
 @login_required
@@ -105,3 +152,12 @@ def logout():
     username = session["username"]
     session.clear()
     return make_response(f"{username} is logged out", 200)
+
+
+def get_instructions(json):
+    instructions = []
+    for inst in json["analyzedInstructions"][0]["steps"]:
+        line = f'{inst["number"]}. {inst["step"]}'
+        instructions.append(line)
+    return "\n".join(instructions)
+
