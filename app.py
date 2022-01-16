@@ -9,7 +9,7 @@ from markupsafe import re
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import ForeignKey, select, exists
 
-from helpers import get_req_arg, login_required
+from helpers import get_req_arg, login_required, merge_ingreds
 
 db_name = "test.db"
 
@@ -82,7 +82,7 @@ def login():
         return resp
 
 @app.route("/register_recipe", methods=["POST"])
-@login_required
+#@login_required
 def register_recipe():
     if request.method == "POST":
         json = request.get_json(force=True)
@@ -131,20 +131,37 @@ def recipe_for_user():
     
     if request.method == "GET":
         username  = session["username"]
+        #username = "mitch"
         query = UsersRecipe.query.filter_by(username=username).all()
-        user_recipes={}
+        user_recipes=[]
         for q in query:
-            recipe = {"date": q.date, "instruction": Recipe.query.filter_by(name=q.recipe_name).first().instructions}
+            recipe = {"recipe_name": q.recipe_name,
+                     "date": q.date, 
+                     "instruction": Recipe.query.filter_by(name=q.recipe_name).first().instructions}
             ingredients = RecipeIngredient.query.filter_by(recipe_name=q.recipe_name).all()
             ingredients_list = []
             for i in ingredients:
-                ingredients_list.append({i.ingredient_name: i.quantity})
+                ingredients_list.append({"name":i.ingredient_name, "quantity": i.quantity})
             recipe["ingredients"] = ingredients_list
 
-            user_recipes[q.recipe_name] = recipe
+            user_recipes.append(recipe)
 
         return jsonify(user_recipes)
 
+@app.route("/grocery_list_for_user", methods=["GET"])
+#@login_required
+def gen_grocery_list():
+    recipes = recipe_for_user()
+
+    agg_ingreds = {}
+    for ingred in map(lambda r: r.ingredients, recipes):
+        if ingred["name"] not in agg_ingreds:
+            agg_ingreds["name"] = ingred["quantity"]
+        else:
+            agg_ingreds["name"] = merge_ingreds(agg_ingreds["name"], ingred["quantity"])
+
+    return jsonify(agg_ingreds)
+            
 
 @app.route("/logout")
 @login_required
