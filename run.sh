@@ -1,0 +1,1 @@
+gunicorn -w 4 "app:app" --bind=":5000"

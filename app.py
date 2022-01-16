@@ -1,21 +1,19 @@
-from curses.ascii import US
-from dis import Instruction
-from enum import unique
-from functools import wraps
-import json
 from sqlite3 import IntegrityError
+
 from flask import Flask, jsonify, make_response, request, session, flash
 from flask_sqlalchemy import SQLAlchemy
-from markupsafe import re
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import ForeignKey, select, exists
 
-from helpers import get_req_arg, login_required, merge_ingreds, ingred_unit_is_known, attempt_to_conv_type_to_known_type, get_amount
+from helpers import (login_required, 
+                     merge_ingreds, 
+                     ingred_unit_is_known, 
+                     attempt_to_conv_type_to_known_type, 
+                     get_amount)
 
-db_name = "test.db"
+DB_NAME = "test.db"
 
 app = Flask(__name__)
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + db_name
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///" + DB_NAME
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 app.config.from_mapping(
     SECRET_KEY="dev"
@@ -25,6 +23,7 @@ db = SQLAlchemy(app)
 
 
 # ------------- DB Definitions -----------------------
+
 class User(db.Model):
     username = db.Column(db.String(80), primary_key=True)
 
@@ -50,6 +49,7 @@ db.create_all()
 
 
 # ------------- Endpoints --------------------
+
 @app.route("/")
 def hello():
     return "hello world"
@@ -81,7 +81,6 @@ def login():
         return resp
 
 @app.route("/register_recipe", methods=["POST"])
-#@login_required
 def register_recipe():
     if request.method == "POST":
         json = request.get_json(force=True)
@@ -101,13 +100,11 @@ def register_recipe():
             name = ingred["name"]
             amount = ingred["amount"]
             unit = attempt_to_conv_type_to_known_type(ingred["unit"].lower())
-
             db.session.add(RecipeIngredient(recipe_name=recipe_name, ingredient_name=name, amount=amount, unit=unit))
 
         db.session.commit()
 
         return make_response("Entered recipe", 200)
-
 
 @app.route("/recipes_for_user", methods=["GET", "POST"])
 @login_required
@@ -176,22 +173,6 @@ def gen_grocery_list():
 
     return jsonify(compact_grocery_list(agg_ingreds))
 
-def remove_name(ingredient):
-    new_ingredient = {}
-    for i in ingredient:
-        if i != "name":
-            new_ingredient[i] = ingredient[i]
-    return new_ingredient
-
-def add_agg_ingred_to_dict(agg_ingreds, ingred):
-    if ingred_unit_is_known(ingred):
-        agg_ingreds[ingred["name"]]["known"] = remove_name(ingred)
-    else:
-        add_ingred_to_unknown(agg_ingreds, ingred)
-        # agg_ingreds[ingred["name"]]["unknown"].append(remove_name(ingred))
-
-def add_ingred_to_unknown(agg_ingreds, ingred):
-    agg_ingreds[ingred["name"]]["unknown"].append(str(ingred["amount"]) +" "+ str(ingred["unit"]))
 
 @app.route("/grocery_list_for_user/random", methods=["GET"])
 @login_required
@@ -252,3 +233,19 @@ def compact_grocery_list(agg_ingredients):
             }) 
 
     return grocery_list
+    
+def remove_name(ingredient):
+    new_ingredient = {}
+    for i in ingredient:
+        if i != "name":
+            new_ingredient[i] = ingredient[i]
+    return new_ingredient
+
+def add_agg_ingred_to_dict(agg_ingreds, ingred):
+    if ingred_unit_is_known(ingred):
+        agg_ingreds[ingred["name"]]["known"] = remove_name(ingred)
+    else:
+        add_ingred_to_unknown(agg_ingreds, ingred)
+
+def add_ingred_to_unknown(agg_ingreds, ingred):
+    agg_ingreds[ingred["name"]]["unknown"].append(str(ingred["amount"]) +" "+ str(ingred["unit"]))
