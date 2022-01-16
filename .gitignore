@@ -9,3 +9,5 @@ build/
 *.egg-info/
 database.txt
 test.db
+json.txt
+req.py
