@@ -133,7 +133,7 @@ def recipe_for_user():
             recipe = {"recipe_name": q.recipe_name,
                      "date": q.date, 
                      "instruction": Recipe.query.filter_by(name=q.recipe_name).first().instructions,
-                     "image": Recipe.query.filter_by(name=q.recipe_name).first().image_url
+                     "image": Recipe.query.filter_by(name=q.recipe_name).first().url_image
             }
             ingredients = RecipeIngredient.query.filter_by(recipe_name=q.recipe_name).all()
             ingredients_list = []
@@ -155,10 +155,10 @@ def gen_grocery_list():
         if ingred["name"] not in agg_ingreds:
             agg_ingreds["name"] = ingred["quantity"]
         else:
-            agg_ingreds["name"] = merge_ingreds(agg_ingreds["name"], ingred["quantity"])
+            existing_ingred_quantity = ingred["name"]
+            agg_ingreds["name"] = merge_ingreds(ingred, existing_ingred_quantity)
 
     return jsonify(agg_ingreds)
-            
 
 @app.route("/logout")
 @login_required
