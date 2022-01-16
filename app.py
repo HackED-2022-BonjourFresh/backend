@@ -30,21 +30,18 @@ class User(db.Model):
 class UsersRecipe(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.Integer, db.ForeignKey("user.username"))
-    recipe_name = db.Column(db.String(50), db.ForeignKey("recipe.name"))
-    date = db.Column(db.String(50))
+    recipe_name = db.Column(db.String(100), db.ForeignKey("recipe.name"))
+    date = db.Column(db.String(100))
 
 class Recipe(db.Model):
-    name = db.Column(db.String(50), primary_key=True)
+    name = db.Column(db.String(100), primary_key=True)
     instructions = db.Column(db.Text)
-
-class Ingredient(db.Model):
-    name = db.Column(db.String(50), primary_key = True)
-    description = db.Column(db.String(50))
+    url_image = db.Column(db.Text)
 
 class RecipeIngredient(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    recipe_name = db.Column(db.String(50), db.ForeignKey("recipe.name"))
-    ingredient_name = db.Column(db.String(50))
+    recipe_name = db.Column(db.String(100), db.ForeignKey("recipe.name"))
+    ingredient_name = db.Column(db.String(100))
     quantity = db.Column(db.Integer)
 
 db.create_all()
@@ -90,17 +87,16 @@ def register_recipe():
         recipe_name = json["title"]
         ingredients = json["extendedIngredients"]
         instructions = get_instructions(json)
+        url_image = json["image"]
 
         q = db.session.query(Recipe).filter(Recipe.name == recipe_name)
         if db.session.query(q.exists()).scalar():
             return "Recipe {} already exists!".format(recipe_name)
 
-        db.session.add(Recipe(name=recipe_name, instructions=instructions))
+        db.session.add(Recipe(name=recipe_name, instructions=instructions, url_image=url_image))
 
         for ingred in ingredients:
-            # q = db.session.query(Ingredient).filter(Ingredient.name == ingred["name"])
-            # # if db.session.query(q.exists()).scalar() is None:
-            # #     db.session.add(Ingredient(name=ingred["name"])) 
+
             amount, unit = ingred["amount"], ingred["unit"]
             quantity = f"{amount} {unit}"
             name = ingred["name"]
@@ -131,13 +127,14 @@ def recipe_for_user():
     
     if request.method == "GET":
         username  = session["username"]
-        #username = "mitch"
         query = UsersRecipe.query.filter_by(username=username).all()
         user_recipes=[]
         for q in query:
             recipe = {"recipe_name": q.recipe_name,
                      "date": q.date, 
-                     "instruction": Recipe.query.filter_by(name=q.recipe_name).first().instructions}
+                     "instruction": Recipe.query.filter_by(name=q.recipe_name).first().instructions,
+                     "image": Recipe.query.filter_by(name=q.recipe_name).first().image_url
+            }
             ingredients = RecipeIngredient.query.filter_by(recipe_name=q.recipe_name).all()
             ingredients_list = []
             for i in ingredients:

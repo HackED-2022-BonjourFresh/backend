@@ -2,6 +2,23 @@ from flask import request, session
 from sqlalchemy import select, exists
 from functools import wraps
 
+# Atomic units are mL
+VOL_UNITS = {
+    "ml": 1.0,
+    "tbs": 5.0,
+    "tbsp": 15.0,
+    "cup": 250.0,
+    "litre": 1000.0,
+}
+
+MASS_UNITS = {
+    "mg": 1.0,
+    "g": 1000.0,
+    "oz": 28000.34952,
+    "Kg": 1,
+
+}
+
 def get_req_arg(key):
     request.args.get(key)
 
@@ -21,25 +38,17 @@ def merge_ingreds(q1, q2):
     pass
 
 
-def convert_vol_unit_to_ml(vol):
-    pass
+def convert_vol_unit_to_ml(vol, unit):
+    VOL_UNITS[unit]
 
-
-# Atomic units are mL
-vol_units = [
-    (5.0, "tbs"),
-    (15.0, "tbsp"),
-    (250, "cup")
-    (1000, "litre")
-]
 
 def pick_smallest_unit_for_volume(vol):
-    for (min_vol, unit) in vol_units:
+    for (unit, min_vol) in VOL_UNITS.items():
         if min_vol > vol:
             continue;
 
         return unit
 
     # Gross... Get the largest unit if it's too big.
-    (_, unit) = vol_units[-1]
+    (_, unit) = VOL_UNITS[-1]
     return unit
